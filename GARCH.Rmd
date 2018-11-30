@@ -1,0 +1,103 @@
+---
+title: "GARFH"
+output: html_document
+---
+
+```{r}
+
+install.packages (c ("quantmod", "rugarch", "rmgarch")) # necessário apenas no caso de você ainda não ter instalado esses pacotes
+install.packages('MTS')
+```
+
+```{r setup, include=FALSE}
+library(quantmod)
+library(rugarch)
+library(rmgarch)
+library(MTS)
+library(urca)
+library(rugarch)
+library(TSA)
+```
+
+Abrindo a Basee pegando a série
+```{r}
+base <- read.csv("Dados_pld.csv", sep = ";")
+pdl <- ts(base[,c(2,6)], start = c(2003, 1),frequency = 12)
+pld <-window(pdl,2003,2012)
+pld_2 <- window(pdl,2013,2018)
+```
+
+Plotando as duas séries
+```{r}
+plot.ts(pdl)
+```
+
+Teste de dickfuller multivariado procurar
+```{r}
+modelo <-
+  ur.df(pdl, type = "none", selectlags = "AIC")#Teste sem intercepto e sem tendência
+summary(modelo)
+```
+
+Fazendo a diferença foi se necessário 2 diferenças para o modelo fica em torno do zero
+```{r}
+dif_pdl=diff(pdl)
+```
+
+Faznedo o grafico
+```{r}
+plot.ts(dif_pdl)
+```
+
+Escohendo modelo arima
+```{r}
+##### Verifanco qual o melhor medolo arma ####
+modd <- mat.or.vec(9,3)
+k <- 1
+for (i in 0:5){
+  for (j in 0:5){
+    c<-arima(diff(pdl),order=c(i,0,j),seasonal=c(i,0,j),include.mean=TRUE,method="ML")
+    modd[k,1]<-paste(i,0,j)
+    modd[k,2]<-AIC(c)
+    modd[k,3]<-BIC(c)
+    k<-k+1
+  }
+}
+colnames(modd)<-c("Modelo","AIC","BIC")
+modd
+#pode-observa que o modelo modelo tanto pelo AIC e BIC ? o modelo (1,2,1)
+
+
+```
+
+Utilizando modelo Garch
+```{r}
+###########usando o garch pelo  urgarchspec
+
+arcc <- ugarchspec(variance.model = list(model = "sGARCH", 
+                                         garchOrder = c(1,2,1), 
+                                         submodel = NULL, 
+                                         external.regressors = NULL, 
+                                         variance.targeting = FALSE), 
+                   
+                   mean.model     = list(armaOrder = c(1,2,1), 
+                                         external.regressors = NULL))
+garch <- ugarchfit(spec = arcc, data = pdl, solver.control=list(trace=0))
+```
+
+```{r}
+###VERIFICANDO OS ACF E PACF
+par(mfrow=c(1,2))
+acf(garch@fit$z)
+acf(garch@fit$z^2)
+pacf(garch@fit$z)
+pacf(garch@fit$z^2)
+
+```
+
+```{r}
+previsao=ugarchforecast(garch,n.ahead=1)
+par(mfrow(1,2))
+plot(previsao@forecast$sigma,type="l")
+```
+
